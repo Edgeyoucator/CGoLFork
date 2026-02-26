@@ -1,0 +1,99 @@
+@import "./tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  background: var(--navy);
+  color: var(--white);
+  font-family: "Georgia", "Times New Roman", serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Glass card */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--glass-radius);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Glass button */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 24px;
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--white);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  box-shadow: var(--glass-shadow);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.btn:active {
+  transform: scale(0.97);
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.btn--primary {
+  background: var(--orange);
+  border-color: var(--orange);
+}
+
+.btn--primary:hover {
+  background: #d9511c;
+  border-color: #d9511c;
+}
+
+.btn--primary:active {
+  background: #c0481a;
+}
+
+/* Glass input */
+.input {
+  padding: 10px 16px;
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--white);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.input:focus {
+  border-color: var(--blue);
+}

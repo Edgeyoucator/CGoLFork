@@ -1,0 +1,89 @@
+import { MID_X } from "../game/types";
+
+const GRID_COLOR = "rgba(255,255,255,0.06)";
+
+const OWNER_COLORS: Record<number, string> = {
+  0: "#f15f24", // P1 orange
+  1: "#86dabd", // P2 mint
+};
+
+// Subtle territory tints
+const TERRITORY_TINTS: Record<number, string> = {
+  0: "rgba(241,95,36,0.03)",  // P1 warm
+  1: "rgba(134,218,189,0.03)", // P2 cool
+};
+
+const DIVIDER_COLOR = "rgba(255,255,255,0.18)";
+
+export interface DrawOptions {
+  showTerritories?: boolean;
+}
+
+export function draw(
+  alive: Uint8Array,
+  owner: Int8Array,
+  gridW: number,
+  gridH: number,
+  cellSize: number,
+  ctx: CanvasRenderingContext2D,
+  options: DrawOptions = {},
+): void {
+  const w = gridW * cellSize;
+  const h = gridH * cellSize;
+
+  // Clear
+  ctx.clearRect(0, 0, w, h);
+
+  // Territory tints
+  if (options.showTerritories) {
+    const midPx = MID_X * cellSize;
+    ctx.fillStyle = TERRITORY_TINTS[0];
+    ctx.fillRect(0, 0, midPx, h);
+    ctx.fillStyle = TERRITORY_TINTS[1];
+    ctx.fillRect(midPx, 0, w - midPx, h);
+  }
+
+  // Draw alive cells grouped by owner for fewer fillStyle swaps
+  for (const ownerId of [0, 1]) {
+    ctx.fillStyle = OWNER_COLORS[ownerId] ?? "#ffffff";
+    for (let y = 0; y < gridH; y++) {
+      for (let x = 0; x < gridW; x++) {
+        const i = y * gridW + x;
+        if (alive[i] && owner[i] === ownerId) {
+          ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+        }
+      }
+    }
+  }
+
+  // Draw grid lines
+  ctx.strokeStyle = GRID_COLOR;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+
+  for (let x = 0; x <= gridW; x++) {
+    const px = x * cellSize + 0.5;
+    ctx.moveTo(px, 0);
+    ctx.lineTo(px, h);
+  }
+  for (let y = 0; y <= gridH; y++) {
+    const py = y * cellSize + 0.5;
+    ctx.moveTo(0, py);
+    ctx.lineTo(w, py);
+  }
+
+  ctx.stroke();
+
+  // Territory divider
+  if (options.showTerritories) {
+    const midPx = MID_X * cellSize + 0.5;
+    ctx.strokeStyle = DIVIDER_COLOR;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(midPx, 0);
+    ctx.lineTo(midPx, h);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
