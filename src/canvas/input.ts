@@ -13,7 +13,6 @@ export function attachInput(
   callbacks: InputCallbacks,
 ): () => void {
   let painting = false;
-  let dragMode: "place" | "erase" | null = null;
 
   function cellFromPointer(e: PointerEvent): { x: number; y: number } | null {
     const rect = canvas.getBoundingClientRect();
@@ -85,9 +84,6 @@ export function attachInput(
     const cell = cellFromPointer(e);
     if (!cell) return;
 
-    // Determine drag mode from first cell
-    dragMode = e.shiftKey ? "erase" : "place";
-
     // First click is a toggle
     if (toggleCell(cell.x, cell.y)) {
       callbacks.onPaint();
@@ -106,7 +102,6 @@ export function attachInput(
 
   function onPointerUp() {
     painting = false;
-    dragMode = null;
   }
 
   canvas.addEventListener("pointerdown", onPointerDown);

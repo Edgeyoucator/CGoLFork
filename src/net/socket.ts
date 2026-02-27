@@ -93,7 +93,7 @@ export class GameSocket {
           );
           break;
         case S2C.SEED_DELTA_REJECTED:
-          this.callbacks.onSeedDeltaRejected?.(msg as SeedDeltaRejected);
+          this.callbacks.onSeedDeltaRejected?.(msg as unknown as SeedDeltaRejected);
           break;
         case S2C.PHASE_CHANGED:
           this.callbacks.onPhaseChanged?.(
@@ -182,3 +182,4 @@ export class GameSocket {
     }
   }
 }
+
