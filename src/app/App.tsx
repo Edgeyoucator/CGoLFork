@@ -11,7 +11,11 @@ import Rooms from "../ui/Rooms";
 import SeedScreen from "../ui/SeedScreen";
 import PlayScreen from "../ui/PlayScreen";
 
-const WS_URL = `ws://${window.location.hostname || "localhost"}:3001`;
+const WS_URL =
+  (import.meta as any)?.env?.VITE_WS_URL ||
+  (window.location.protocol === "https:"
+    ? `wss://${window.location.hostname}`
+    : `ws://${window.location.hostname || "localhost"}:3001`);
 const DEBUG_SYNC = false;
 
 export default function App() {
