@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
+import http from "node:http";
 import { WebSocketServer } from "ws";
 import { C2S, S2C } from "./protocol.js";
 import {
@@ -16,11 +17,33 @@ import {
   unregisterClient,
   broadcastRoomList,
 } from "./rooms.js";
+import { getDb } from "./firebaseAdmin.js";
 
-const PORT = 3001;
-const wss = new WebSocketServer({ port: PORT });
+const PORT = Number(process.env.PORT) || 3001;
 
-console.log(`Conway Duel server listening on ws://localhost:${PORT}`);
+const server = http.createServer((req, res) => {
+  if (req.method === "GET" && req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/plain");
+  res.end("Conway Duel server");
+});
+
+const wss = new WebSocketServer({ server });
+
+server.listen(PORT, () => {
+  console.log(`Conway Duel server listening on PORT=${PORT}`);
+  // Trigger Firebase Admin init (if configured) and log status
+  const db = getDb();
+  if (db) {
+    console.log("Firebase Admin initialised");
+  } else {
+    console.log("Firebase Admin not configured; leaderboard writes disabled.");
+  }
+});
 
 wss.on("connection", (ws) => {
   ws.playerName = null;
