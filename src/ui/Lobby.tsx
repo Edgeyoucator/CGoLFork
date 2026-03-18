@@ -8,6 +8,7 @@ const ABOUT_SLIDES = ["/images/1.webp", "/images/2.webp", "/images/3.webp"];
 
 export default function Lobby({ onContinue }: Props) {
   const [name, setName] = useState("");
+  const [shake, setShake] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [slideIndex, setSlideIndex] = useState(0);
   const isMobile = window.matchMedia("(pointer: coarse)").matches;
@@ -194,16 +195,21 @@ export default function Lobby({ onContinue }: Props) {
           </p>
 
           <input
-            className="input"
+            className={`input${shake ? " input--error" : ""}`}
             placeholder="Your name"
             value={name}
             inputMode="text"
             autoComplete="off"
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => { setName(e.target.value); setShake(false); }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
+                if (!name.trim()) {
+                  setShake(false);
+                  requestAnimationFrame(() => setShake(true));
+                  return;
+                }
                 (e.currentTarget as HTMLElement).blur();
-                onContinue(name || "Player");
+                onContinue(name.trim());
               }
             }}
           />
@@ -211,9 +217,10 @@ export default function Lobby({ onContinue }: Props) {
           <button
             className="btn btn--primary"
             style={{ marginTop: 8 }}
+            disabled={!name.trim()}
             onClick={(e) => {
               (e.currentTarget as HTMLElement).blur();
-              onContinue(name || "Player");
+              onContinue(name.trim());
             }}
           >
             Continue

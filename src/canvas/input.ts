@@ -1,6 +1,12 @@
 import { GRID_W, GRID_H, MID_X, idx } from "../game/types";
 import type { BoardState } from "../game/types";
 
+export interface ViewTransform {
+  zoom: number;
+  panX: number;
+  panY: number;
+}
+
 export interface InputCallbacks {
   onPaint: () => void;
   getBudgetRemaining: () => number;
@@ -12,6 +18,7 @@ export function attachInput(
   getActivePlayer: () => number, // 0 or 1
   callbacks: InputCallbacks,
   viewCols?: [number, number],
+  viewTransform?: ViewTransform,
 ): () => void {
   const startCol = viewCols ? viewCols[0] : 0;
   const colCount = viewCols ? viewCols[1] - viewCols[0] : GRID_W;
@@ -21,9 +28,15 @@ export function attachInput(
 
   function cellFromPointer(e: PointerEvent): { x: number; y: number } | null {
     const rect = canvas.getBoundingClientRect();
-    const cellSize = rect.width / colCount;
-    const x = Math.floor((e.clientX - rect.left) / cellSize) + startCol;
-    const y = Math.floor((e.clientY - rect.top) / cellSize);
+    let cx = e.clientX - rect.left;
+    let cy = e.clientY - rect.top;
+    if (viewTransform) {
+      cx = cx / viewTransform.zoom + viewTransform.panX;
+      cy = cy / viewTransform.zoom + viewTransform.panY;
+    }
+    const cellSize = canvas.width / colCount;
+    const x = Math.floor(cx / cellSize) + startCol;
+    const y = Math.floor(cy / cellSize);
     if (x < startCol || x >= startCol + colCount || y < 0 || y >= GRID_H) return null;
     return { x, y };
   }

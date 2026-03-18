@@ -210,11 +210,19 @@ export default function PlayScreen({
           alignItems: "center",
           justifyContent: "space-between",
           padding: "12px 20px",
-          flexWrap: "wrap",
-          gap: 12,
+          flexWrap: isMobile ? undefined : "wrap",
+          gap: isMobile ? 4 : 12,
+          flexDirection: isMobile ? "column" : "row",
         }}
       >
-        <div style={{ display: "flex", gap: 24 }}>
+        {/* Row 1 (mobile) or left side (desktop): tick */}
+        <div style={{ display: "flex", gap: 16, alignItems: "center", order: isMobile ? 0 : 1 }}>
+          <span style={{ fontWeight: "bold", color: "var(--blue)" }}>
+            Tick: {tick} / {mode.maxTicks}
+          </span>
+        </div>
+        {/* Row 2 (mobile) or right side (desktop): cell counts */}
+        <div style={{ display: "flex", gap: 24, order: isMobile ? 1 : 0 }}>
           <span>
             <span
               style={{
@@ -240,11 +248,6 @@ export default function PlayScreen({
               }}
             />
             {players[1]}: {counts[1]}
-          </span>
-        </div>
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          <span style={{ fontWeight: "bold", color: "var(--blue)" }}>
-            Tick: {tick} / {mode.maxTicks}
           </span>
         </div>
       </div>
