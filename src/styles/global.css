@@ -57,12 +57,15 @@ body {
   border-radius: 12px;
   box-shadow: var(--glass-shadow);
   cursor: pointer;
+  min-height: 44px;
   transition: background 0.15s, border-color 0.15s, transform 0.1s;
 }
 
-.btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.22);
+@media (hover: hover) {
+  .btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.22);
+  }
 }
 
 .btn:active {
@@ -75,9 +78,11 @@ body {
   border-color: var(--orange);
 }
 
-.btn--primary:hover {
-  background: #d9511c;
-  border-color: #d9511c;
+@media (hover: hover) {
+  .btn--primary:hover {
+    background: #d9511c;
+    border-color: #d9511c;
+  }
 }
 
 .btn--primary:active {

@@ -16,6 +16,8 @@ interface Props {
   interactive?: boolean;
   /** Optional ref that parent can use to trigger imperative redraws */
   redrawRef?: MutableRefObject<(() => void) | null>;
+  /** Restrict rendering and input to a column range, e.g. [0, 40] for left half */
+  viewCols?: [number, number];
 }
 
 export default function LifeCanvas({
@@ -26,21 +28,24 @@ export default function LifeCanvas({
   showTerritories = false,
   interactive = true,
   redrawRef,
+  viewCols,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const activePlayerRef = useRef(activePlayer);
   activePlayerRef.current = activePlayer;
 
   const drawOptions: DrawOptions = { showTerritories };
+  const startCol = viewCols ? viewCols[0] : 0;
+  const colCount = viewCols ? viewCols[1] - viewCols[0] : GRID_W;
 
   const redraw = useCallback(() => {
     const cvs = canvasRef.current;
     if (!cvs) return;
     const ctx = cvs.getContext("2d");
     if (!ctx) return;
-    const cellSize = cvs.width / GRID_W;
-    draw(board.alive, board.owner, GRID_W, GRID_H, cellSize, ctx, drawOptions);
-  }, [board, showTerritories]);
+    const cellSize = cvs.width / colCount;
+    draw(board.alive, board.owner, GRID_W, GRID_H, cellSize, ctx, drawOptions, startCol, colCount);
+  }, [board, showTerritories, startCol, colCount]);
 
   // Expose redraw to parent
   useEffect(() => {
@@ -60,15 +65,15 @@ export default function LifeCanvas({
     function resize() {
       const pw = parent!.clientWidth;
       const ph = parent!.clientHeight;
-      const aspect = GRID_W / GRID_H;
+      const aspect = colCount / GRID_H;
       let w = pw;
       let h = pw / aspect;
       if (h > ph) {
         h = ph;
         w = ph * aspect;
       }
-      const cellSize = Math.floor(w / GRID_W);
-      cvs!.width = cellSize * GRID_W;
+      const cellSize = Math.floor(w / colCount);
+      cvs!.width = cellSize * colCount;
       cvs!.height = cellSize * GRID_H;
       cvs!.style.width = cvs!.width + "px";
       cvs!.style.height = cvs!.height + "px";
@@ -95,7 +100,7 @@ export default function LifeCanvas({
     if (!interactive) return;
     const cvs = canvasRef.current;
     if (!cvs) return;
-    const cleanup = attachInput(cvs, board, () => activePlayerRef.current, callbacksRef.current);
+    const cleanup = attachInput(cvs, board, () => activePlayerRef.current, callbacksRef.current, viewCols);
     return cleanup;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [board, interactive]);

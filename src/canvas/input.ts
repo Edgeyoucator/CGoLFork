@@ -11,16 +11,20 @@ export function attachInput(
   board: BoardState,
   getActivePlayer: () => number, // 0 or 1
   callbacks: InputCallbacks,
+  viewCols?: [number, number],
 ): () => void {
+  const startCol = viewCols ? viewCols[0] : 0;
+  const colCount = viewCols ? viewCols[1] - viewCols[0] : GRID_W;
+
   let painting = false;
   let visitedCells = new Set<number>();
 
   function cellFromPointer(e: PointerEvent): { x: number; y: number } | null {
     const rect = canvas.getBoundingClientRect();
-    const cellSize = rect.width / GRID_W;
-    const x = Math.floor((e.clientX - rect.left) / cellSize);
+    const cellSize = rect.width / colCount;
+    const x = Math.floor((e.clientX - rect.left) / cellSize) + startCol;
     const y = Math.floor((e.clientY - rect.top) / cellSize);
-    if (x < 0 || x >= GRID_W || y < 0 || y >= GRID_H) return null;
+    if (x < startCol || x >= startCol + colCount || y < 0 || y >= GRID_H) return null;
     return { x, y };
   }
 

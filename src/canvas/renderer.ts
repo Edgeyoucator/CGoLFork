@@ -27,30 +27,36 @@ export function draw(
   cellSize: number,
   ctx: CanvasRenderingContext2D,
   options: DrawOptions = {},
+  startCol = 0,
+  colCount = gridW,
 ): void {
-  const w = gridW * cellSize;
+  const w = colCount * cellSize;
   const h = gridH * cellSize;
 
   // Clear
   ctx.clearRect(0, 0, w, h);
 
-  // Territory tints
+  // Territory tints — clipped to visible column range
   if (options.showTerritories) {
-    const midPx = MID_X * cellSize;
-    ctx.fillStyle = TERRITORY_TINTS[0];
-    ctx.fillRect(0, 0, midPx, h);
-    ctx.fillStyle = TERRITORY_TINTS[1];
-    ctx.fillRect(midPx, 0, w - midPx, h);
+    const visibleMid = Math.max(0, Math.min(colCount, MID_X - startCol));
+    if (visibleMid > 0) {
+      ctx.fillStyle = TERRITORY_TINTS[0];
+      ctx.fillRect(0, 0, visibleMid * cellSize, h);
+    }
+    if (visibleMid < colCount) {
+      ctx.fillStyle = TERRITORY_TINTS[1];
+      ctx.fillRect(visibleMid * cellSize, 0, (colCount - visibleMid) * cellSize, h);
+    }
   }
 
   // Draw alive cells grouped by owner for fewer fillStyle swaps
   for (const ownerId of [0, 1]) {
     ctx.fillStyle = OWNER_COLORS[ownerId] ?? "#ffffff";
     for (let y = 0; y < gridH; y++) {
-      for (let x = 0; x < gridW; x++) {
+      for (let x = startCol; x < startCol + colCount; x++) {
         const i = y * gridW + x;
         if (alive[i] && owner[i] === ownerId) {
-          ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+          ctx.fillRect((x - startCol) * cellSize, y * cellSize, cellSize, cellSize);
         }
       }
     }
@@ -61,8 +67,8 @@ export function draw(
   ctx.lineWidth = 1;
   ctx.beginPath();
 
-  for (let x = 0; x <= gridW; x++) {
-    const px = x * cellSize + 0.5;
+  for (let c = 0; c <= colCount; c++) {
+    const px = c * cellSize + 0.5;
     ctx.moveTo(px, 0);
     ctx.lineTo(px, h);
   }
@@ -74,16 +80,19 @@ export function draw(
 
   ctx.stroke();
 
-  // Territory divider
+  // Territory divider — only draw if it falls within the visible column range
   if (options.showTerritories) {
-    const midPx = MID_X * cellSize + 0.5;
-    ctx.strokeStyle = DIVIDER_COLOR;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 4]);
-    ctx.beginPath();
-    ctx.moveTo(midPx, 0);
-    ctx.lineTo(midPx, h);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    const midRelative = MID_X - startCol;
+    if (midRelative > 0 && midRelative < colCount) {
+      const midPx = midRelative * cellSize + 0.5;
+      ctx.strokeStyle = DIVIDER_COLOR;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(midPx, 0);
+      ctx.lineTo(midPx, h);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
   }
 }
