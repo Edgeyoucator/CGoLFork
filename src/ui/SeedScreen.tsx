@@ -119,8 +119,8 @@ export default function SeedScreen({
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        padding: 16,
-        gap: 12,
+        padding: isMobile ? 8 : 16,
+        gap: isMobile ? 8 : 12,
         position: "relative",
       }}
     >
@@ -323,21 +323,6 @@ export default function SeedScreen({
         )}
       </div>
 
-      {/* Rules button — above canvas on mobile, hidden when viewing AI */}
-      {isMobile && !viewingAI && (
-        <button
-          className="btn btn--glow"
-          onClick={() => { setSlideIndex(0); setAboutOpen(true); }}
-          style={{
-            background: "rgba(241,95,36,0.2)",
-            border: "1px solid var(--orange)",
-            color: "var(--mint)",
-            alignSelf: "center",
-          }}
-        >
-          Rules
-        </button>
-      )}
 
       {/* Canvas area */}
       <LifeCanvas
@@ -392,8 +377,8 @@ export default function SeedScreen({
         ) : (
           /* Normal mobile controls */
           <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 52 }}>
-            {/* Row 1: Play — centred, prominent */}
-            <div style={{ display: "flex", justifyContent: "center" }}>
+            {/* Row 1: Play + ? — centred, prominent */}
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12 }}>
               <button
                 className="btn"
                 onClick={() => toggleReady(0)}
@@ -407,6 +392,28 @@ export default function SeedScreen({
                 }}
               >
                 {ready[0] ? "Unready" : "Play"}
+              </button>
+              <button
+                className="btn btn--glow"
+                onClick={() => { setSlideIndex(0); setAboutOpen(true); }}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: "50%",
+                  background: "rgba(241,95,36,0.2)",
+                  border: "1px solid var(--orange)",
+                  color: "var(--mint)",
+                  fontSize: "1.3rem",
+                  fontWeight: 700,
+                  padding: 0,
+                  minHeight: "unset",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                ?
               </button>
             </div>
             {/* Row 2: Clear + See AI — centred, tight gap */}

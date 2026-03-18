@@ -19,6 +19,12 @@ export interface DrawOptions {
   showTerritories?: boolean;
 }
 
+export interface ViewTransform {
+  zoom: number;
+  panX: number;
+  panY: number;
+}
+
 export function draw(
   alive: Uint8Array,
   owner: Int8Array,
@@ -29,12 +35,19 @@ export function draw(
   options: DrawOptions = {},
   startCol = 0,
   colCount = gridW,
+  viewTransform?: ViewTransform,
 ): void {
   const w = colCount * cellSize;
   const h = gridH * cellSize;
 
-  // Clear
-  ctx.clearRect(0, 0, w, h);
+  // Clear full canvas before applying any transform
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+  ctx.save();
+  if (viewTransform && (viewTransform.zoom !== 1 || viewTransform.panX !== 0 || viewTransform.panY !== 0)) {
+    ctx.scale(viewTransform.zoom, viewTransform.zoom);
+    ctx.translate(-viewTransform.panX, -viewTransform.panY);
+  }
 
   // Territory tints — clipped to visible column range
   if (options.showTerritories) {
@@ -95,4 +108,6 @@ export function draw(
       ctx.setLineDash([]);
     }
   }
+
+  ctx.restore();
 }
