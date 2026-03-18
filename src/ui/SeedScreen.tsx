@@ -25,12 +25,14 @@ export default function SeedScreen({
   onResetAI,
   aiMode = false,
 }: Props) {
+  const isMobile = window.matchMedia("(pointer: coarse)").matches;
   const isSpectator = false;
   const playerRole = 0;
 
   const [activePlayer, setActivePlayer] = useState(0);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [slideIndex, setSlideIndex] = useState(0);
+  const [viewingAI, setViewingAI] = useState(false);
   const [counts, setCounts] = useState<[number, number]>(() => countCells(board));
   const redrawRef = useRef<(() => void) | null>(null);
 
@@ -147,20 +149,25 @@ export default function SeedScreen({
       >
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ position: "relative", display: "inline-block" }}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 20,
+            }}
           >
             <img
               src={ABOUT_SLIDES[slideIndex]}
               alt={`About slide ${slideIndex + 1}`}
               style={{
                 display: "block",
-                maxHeight: "80vh",
+                maxHeight: "72vh",
                 maxWidth: "90vw",
                 borderRadius: 12,
                 boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
               }}
             />
-            <div style={{ position: "absolute", bottom: 20, left: 20 }}>
+            <div>
               {slideIndex < ABOUT_SLIDES.length - 1 ? (
                 <button
                   className="btn btn--primary"
@@ -180,34 +187,36 @@ export default function SeedScreen({
           </div>
         </div>
 
-      {/* About button — absolute left, vertically centred */}
-      <button
-        className="btn btn--glow"
-        onClick={() => { setSlideIndex(0); setAboutOpen(true); }}
-        style={{
-          position: "absolute",
-          left: 60,
-          top: "50%",
-          transform: "translateY(-50%)",
-          zIndex: 5,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          padding: "20px 18px",
-          fontSize: "0.85rem",
-          fontWeight: 600,
-          letterSpacing: "0.06em",
-          textAlign: "center",
-          background: "rgba(241,95,36,0.2)",
-          border: "1px solid var(--orange)",
-          borderRadius: 14,
-          lineHeight: 1.5,
-          width: 160,
-          color: "var(--mint)",
-        }}
-      >
-        <span>What are<br />the rules?</span>
-      </button>
+      {/* About button — absolute on desktop, hidden here on mobile (rendered inline in controls instead) */}
+      {!isMobile && (
+        <button
+          className="btn btn--glow"
+          onClick={() => { setSlideIndex(0); setAboutOpen(true); }}
+          style={{
+            position: "absolute",
+            left: 60,
+            top: "50%",
+            transform: "translateY(-50%)",
+            zIndex: 5,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            padding: "20px 18px",
+            fontSize: "0.85rem",
+            fontWeight: 600,
+            letterSpacing: "0.06em",
+            textAlign: "center",
+            background: "rgba(241,95,36,0.2)",
+            border: "1px solid var(--orange)",
+            borderRadius: 14,
+            lineHeight: 1.5,
+            width: 160,
+            color: "var(--mint)",
+          }}
+        >
+          <span>What are<br />the rules?</span>
+        </button>
+      )}
       {/* HUD */}
       <div
         className="glass"
@@ -220,77 +229,115 @@ export default function SeedScreen({
           gap: 12,
         }}
       >
-        <div style={{ display: "flex", gap: 24 }}>
-          <span>
+        {isMobile ? (
+          /* Mobile: show player or AI count depending on view */
+          <span style={{ fontWeight: "bold", color: viewingAI ? "var(--mint)" : "var(--orange)" }}>
             <span
               style={{
                 display: "inline-block",
                 width: 12,
                 height: 12,
                 borderRadius: 3,
-                background: "var(--orange)",
+                background: viewingAI ? "var(--mint)" : "var(--orange)",
                 marginRight: 6,
               }}
             />
-            {players[0]}: {counts[0]}/{DEFAULT_BUDGET}
-            <span
-              style={{
-                marginLeft: 8,
-                fontSize: "0.85em",
-                color: ready[0] ? "var(--mint)" : "rgba(255,255,255,0.4)",
-              }}
-            >
-              {ready[0] ? "Ready" : "Not Ready"}
-            </span>
+            {viewingAI
+              ? `${players[1]}: ${counts[1]}/${DEFAULT_BUDGET} cells placed`
+              : `${players[0]}: ${counts[0]}/${DEFAULT_BUDGET} cells placed`}
           </span>
-          <span>
-            <span
-              style={{
-                display: "inline-block",
-                width: 12,
-                height: 12,
-                borderRadius: 3,
-                background: "var(--mint)",
-                marginRight: 6,
-              }}
-            />
-            {players[1]}: {counts[1]}/{DEFAULT_BUDGET}
-            <span
-              style={{
-                marginLeft: 8,
-                fontSize: "0.85em",
-                color: ready[1] ? "var(--mint)" : "rgba(255,255,255,0.4)",
-              }}
-            >
-              {ready[1] ? "Ready" : "Not Ready"}
-            </span>
-          </span>
-        </div>
+        ) : (
+          /* Desktop: show both players */
+          <>
+            <div style={{ display: "flex", gap: 24 }}>
+              <span>
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: 12,
+                    height: 12,
+                    borderRadius: 3,
+                    background: "var(--orange)",
+                    marginRight: 6,
+                  }}
+                />
+                {players[0]}: {counts[0]}/{DEFAULT_BUDGET}
+                <span
+                  style={{
+                    marginLeft: 8,
+                    fontSize: "0.85em",
+                    color: ready[0] ? "var(--mint)" : "rgba(255,255,255,0.4)",
+                  }}
+                >
+                  {ready[0] ? "Ready" : "Not Ready"}
+                </span>
+              </span>
+              <span>
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: 12,
+                    height: 12,
+                    borderRadius: 3,
+                    background: "var(--mint)",
+                    marginRight: 6,
+                  }}
+                />
+                {players[1]}: {counts[1]}/{DEFAULT_BUDGET}
+                <span
+                  style={{
+                    marginLeft: 8,
+                    fontSize: "0.85em",
+                    color: ready[1] ? "var(--mint)" : "rgba(255,255,255,0.4)",
+                  }}
+                >
+                  {ready[1] ? "Ready" : "Not Ready"}
+                </span>
+              </span>
+            </div>
 
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          {roleLabel && (
-            <span
-              style={{
-                fontSize: "0.85em",
-                color: isSpectator ? "var(--grey)" : PLAYER_COLORS[playerRole],
-                fontWeight: "bold",
-              }}
-            >
-              {roleLabel}
-            </span>
-          )}
-          {!isSpectator && (
-            <span
-              style={{
-                fontWeight: "bold",
-                color: PLAYER_COLORS[activePlayer],
-              }}
-            >
-              Playing as: {players[activePlayer]}
-            </span>
-          )}
-        </div>
+            <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+              {roleLabel && (
+                <span
+                  style={{
+                    fontSize: "0.85em",
+                    color: isSpectator ? "var(--grey)" : PLAYER_COLORS[playerRole],
+                    fontWeight: "bold",
+                  }}
+                >
+                  {roleLabel}
+                </span>
+              )}
+              {!isSpectator && (
+                <span
+                  style={{
+                    fontWeight: "bold",
+                    color: PLAYER_COLORS[activePlayer],
+                  }}
+                >
+                  Playing as: {players[activePlayer]}
+                </span>
+              )}
+            </div>
+          </>
+        )}
       </div>
+
+      {/* Rules button — above canvas on mobile, hidden when viewing AI */}
+      {isMobile && !viewingAI && (
+        <button
+          className="btn btn--glow"
+          onClick={() => { setSlideIndex(0); setAboutOpen(true); }}
+          style={{
+            background: "rgba(241,95,36,0.2)",
+            border: "1px solid var(--orange)",
+            color: "var(--mint)",
+            alignSelf: "center",
+          }}
+        >
+          Rules
+        </button>
+      )}
 
       {/* Canvas area */}
       <LifeCanvas
@@ -299,57 +346,122 @@ export default function SeedScreen({
         onPaint={handlePaint}
         getBudgetRemaining={getBudgetRemaining}
         showTerritories
-        interactive={!isSpectator}
+        interactive={isMobile ? (!isSpectator && !viewingAI) : !isSpectator}
         redrawRef={redrawRef}
+        viewCols={isMobile ? (viewingAI ? [40, 80] : [0, 40]) : undefined}
       />
 
-      {/* Controls */}
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          justifyContent: "center",
-          flexWrap: "wrap",
-        }}
-      >
-        <button className="btn" onClick={onBack}>Back to Lobby</button>
-
+      {/* Back to Lobby — arrow text link, bottom left, hidden when viewing AI */}
+      {!viewingAI && (
         <button
-          className="btn"
-          onClick={() => toggleReady(0)}
+          onClick={onBack}
           style={{
-            borderColor: "var(--mint)",
-            background: "rgba(134,218,189,0.15)",
-            color: "var(--mint)",
+            position: "absolute",
+            bottom: 16,
+            left: 16,
+            zIndex: 5,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "rgba(255,255,255,0.55)",
+            fontSize: "0.85rem",
+            fontFamily: "inherit",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: 0,
+            minHeight: 44,
           }}
         >
-          {aiMode ? (ready[0] ? "Unready" : "Play") : `P1: ${ready[0] ? "Unready" : "Ready"}`}
+          ← Back to Lobby
         </button>
+      )}
 
-        {!aiMode && (
+      {/* Controls */}
+      {isMobile ? (
+        viewingAI ? (
+          /* AI view controls */
+          <div style={{ display: "flex", gap: 8, justifyContent: "center", paddingBottom: 52 }}>
+            <button className="btn" onClick={() => setViewingAI(false)}>
+              ← Back to my Cells
+            </button>
+            <button className="btn" onClick={() => { handleResetAI(); }}>
+              Reset AI Cells
+            </button>
+          </div>
+        ) : (
+          /* Normal mobile controls */
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 52 }}>
+            {/* Row 1: Play — centred, prominent */}
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <button
+                className="btn"
+                onClick={() => toggleReady(0)}
+                style={{
+                  borderColor: "var(--mint)",
+                  background: "rgba(134,218,189,0.15)",
+                  color: "var(--mint)",
+                  fontSize: "1.1rem",
+                  fontWeight: 700,
+                  minWidth: 160,
+                }}
+              >
+                {ready[0] ? "Unready" : "Play"}
+              </button>
+            </div>
+            {/* Row 2: Clear + See AI — centred, tight gap */}
+            <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+              {!isSpectator && (
+                <button className="btn" onClick={handleClearMyself}>
+                  Clear my Cells
+                </button>
+              )}
+              {aiMode && (
+                <button className="btn" onClick={() => setViewingAI(true)}>
+                  See AI Cells
+                </button>
+              )}
+            </div>
+          </div>
+        )
+      ) : (
+        /* Desktop controls */
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
           <button
             className="btn"
-            onClick={() => setActivePlayer((p) => (p === 0 ? 1 : 0))}
-            style={{ borderColor: PLAYER_COLORS[activePlayer] }}
+            onClick={() => toggleReady(0)}
+            style={{
+              borderColor: "var(--mint)",
+              background: "rgba(134,218,189,0.15)",
+              color: "var(--mint)",
+            }}
           >
-            Switch to {players[activePlayer === 0 ? 1 : 0]}
+            {aiMode ? (ready[0] ? "Unready" : "Play") : `P1: ${ready[0] ? "Unready" : "Ready"}`}
           </button>
-        )}
 
-        {!isSpectator && (
-          <button className="btn" onClick={handleClearMyself}>
-            Clear my Cells
-          </button>
-        )}
+          {!aiMode && (
+            <button
+              className="btn"
+              onClick={() => setActivePlayer((p) => (p === 0 ? 1 : 0))}
+              style={{ borderColor: PLAYER_COLORS[activePlayer] }}
+            >
+              Switch to {players[activePlayer === 0 ? 1 : 0]}
+            </button>
+          )}
 
-        {aiMode && (
-          <button className="btn" onClick={handleResetAI}>
-            Reset AI Cells
-          </button>
-        )}
+          {!isSpectator && (
+            <button className="btn" onClick={handleClearMyself}>
+              Clear my Cells
+            </button>
+          )}
 
-        <>
-          {aiMode ? null : (
+          {aiMode && (
+            <button className="btn" onClick={handleResetAI}>
+              Reset AI Cells
+            </button>
+          )}
+
+          {!aiMode && (
             <button
               className="btn"
               onClick={() => toggleReady(1)}
@@ -361,8 +473,8 @@ export default function SeedScreen({
               P2: {ready[1] ? "Unready" : "Ready"}
             </button>
           )}
-        </>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

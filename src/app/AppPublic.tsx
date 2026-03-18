@@ -10,6 +10,7 @@ import PlayScreen from "../ui/PlayScreen";
 type Screen = "lobby" | "seed" | "play";
 
 export default function AppPublic() {
+  const isMobile = window.matchMedia("(pointer: coarse)").matches;
   const [screen, setScreen] = useState<Screen>("lobby");
   const [players, setPlayers] = useState<[string, string]>(["Player", "AI"]);
   const [showHowToPlay, setShowHowToPlay] = useState(false);
@@ -165,7 +166,7 @@ export default function AppPublic() {
           }}
         >
           <img
-            src="/video/how-to-play.gif"
+            src={isMobile ? "/video/how-to-play-mobile.gif" : "/video/how-to-play.gif"}
             alt="How to play"
             style={{
               maxHeight: "80vh",

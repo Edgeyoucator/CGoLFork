@@ -177,6 +177,8 @@ export default function PlayScreen({
     setTimeout(() => setLocalPlaying(true), 0);
   }, [onReplay, board, total]);
 
+  const isMobile = window.matchMedia("(pointer: coarse)").matches;
+
   let winner: string | null = null;
   if (finished) {
     winner = mode.getWinner({ p1Live: counts[0], p2Live: counts[1], tick });
@@ -247,6 +249,18 @@ export default function PlayScreen({
         </div>
       </div>
 
+      {/* Mobile: prominent play/pause button between HUD and canvas */}
+      {isMobile && (
+        <button
+          className="btn btn--primary"
+          onClick={handlePlayPause}
+          disabled={finished}
+          style={{ width: "100%", fontSize: "1.1rem", fontWeight: 700 }}
+        >
+          {localPlaying ? "⏸ Pause" : "▶ Play"}
+        </button>
+      )}
+
       {/* Canvas */}
       <div style={{ position: "relative", flex: 1, display: "flex", minHeight: 0 }}>
         <LifeCanvas
@@ -277,14 +291,16 @@ export default function PlayScreen({
           flexWrap: "wrap",
         }}
       >
-        <button
-          className="btn"
-          onClick={handlePlayPause}
-          style={{ minWidth: 90 }}
-          disabled={finished}
-        >
-          {localPlaying ? "Pause" : "Play"}
-        </button>
+        {!isMobile && (
+          <button
+            className="btn"
+            onClick={handlePlayPause}
+            style={{ minWidth: 90 }}
+            disabled={finished}
+          >
+            {localPlaying ? "Pause" : "Play"}
+          </button>
+        )}
         <button className="btn" onClick={handleStep} disabled={finished}>
           Step
         </button>
@@ -324,7 +340,9 @@ export default function PlayScreen({
               flexDirection: "column",
               alignItems: "center",
               gap: 16,
-              minWidth: 320,
+              minWidth: 280,
+              maxWidth: "min(480px, 90vw)",
+              width: "100%",
             }}
           >
             <h2 style={{ fontSize: "1.6rem", margin: 0 }}>

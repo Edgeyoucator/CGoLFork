@@ -10,6 +10,7 @@ export default function Lobby({ onContinue }: Props) {
   const [name, setName] = useState("");
   const [aboutOpen, setAboutOpen] = useState(false);
   const [slideIndex, setSlideIndex] = useState(0);
+  const isMobile = window.matchMedia("(pointer: coarse)").matches;
 
   return (
     <div
@@ -48,8 +49,10 @@ export default function Lobby({ onContinue }: Props) {
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              position: "relative",
-              display: "inline-block",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 20,
             }}
           >
             <img
@@ -57,19 +60,13 @@ export default function Lobby({ onContinue }: Props) {
               alt={`About slide ${slideIndex + 1}`}
               style={{
                 display: "block",
-                maxHeight: "80vh",
+                maxHeight: "72vh",
                 maxWidth: "90vw",
                 borderRadius: 12,
                 boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
               }}
             />
-            <div
-              style={{
-                position: "absolute",
-                bottom: 20,
-                left: 20,
-              }}
-            >
+            <div>
               {slideIndex < ABOUT_SLIDES.length - 1 ? (
                 <button
                   className="btn btn--primary"
@@ -130,14 +127,15 @@ export default function Lobby({ onContinue }: Props) {
           transform: "translateX(-50%)",
           zIndex: 3,
           fontFamily: "LeBeaune, serif",
-          fontSize: "6rem",
+          fontSize: isMobile ? "clamp(3rem, 12vw, 6rem)" : "6rem",
           letterSpacing: "0.1em",
-          whiteSpace: "nowrap",
-          lineHeight: 1,
+          lineHeight: 1.1,
+          textAlign: "center",
+          whiteSpace: isMobile ? "normal" : "nowrap",
           pointerEvents: "none",
         }}
       >
-        CONWAY'S CLASH
+        {isMobile ? <>CONWAY'S<br />CLASH</> : "CONWAY'S CLASH"}
       </h1>
 
       {/* About button — bottom of screen */}
@@ -163,22 +161,24 @@ export default function Lobby({ onContinue }: Props) {
         style={{
           position: "relative",
           zIndex: 2,
-          width: 380,
+          width: "min(380px, 90vw)",
         }}
       >
-        <img
-          src="/images/developed at (2).png"
-          alt="Developed at"
-          style={{
-            position: "absolute",
-            right: "100%",
-            top: "50%",
-            transform: "translateY(-50%)",
-            height: 300,
-            objectFit: "contain",
-            marginRight: 32,
-          }}
-        />
+        {!isMobile && (
+          <img
+            src="/images/developed at (2).png"
+            alt="Developed at"
+            style={{
+              position: "absolute",
+              right: "100%",
+              top: "50%",
+              transform: "translateY(-50%)",
+              height: 300,
+              objectFit: "contain",
+              marginRight: 32,
+            }}
+          />
+        )}
 
         <div
           className="glass"
@@ -197,35 +197,71 @@ export default function Lobby({ onContinue }: Props) {
             className="input"
             placeholder="Your name"
             value={name}
+            inputMode="text"
+            autoComplete="off"
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") onContinue(name || "Player");
+              if (e.key === "Enter") {
+                (e.currentTarget as HTMLElement).blur();
+                onContinue(name || "Player");
+              }
             }}
           />
 
           <button
             className="btn btn--primary"
             style={{ marginTop: 8 }}
-            onClick={() => onContinue(name || "Player")}
+            onClick={(e) => {
+              (e.currentTarget as HTMLElement).blur();
+              onContinue(name || "Player");
+            }}
           >
             Continue
           </button>
 
         </div>
 
-        <img
-          src="/images/logowhite.png"
-          alt="Logo"
-          style={{
+        {isMobile && (
+          <div style={{
             position: "absolute",
-            left: "100%",
-            top: "50%",
-            transform: "translateY(-50%)",
-            height: 300,
-            objectFit: "contain",
-            marginLeft: -70,
-          }}
-        />
+            top: "100%",
+            left: 0,
+            right: 0,
+            marginTop: 20,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            paddingLeft: 8,
+            paddingRight: 8,
+          }}>
+            <img
+              src="/images/developed at (2).png"
+              alt="Developed at"
+              style={{ height: 80, objectFit: "contain" }}
+            />
+            <img
+              src="/images/logowhite.png"
+              alt="Logo"
+              style={{ height: 80, objectFit: "contain" }}
+            />
+          </div>
+        )}
+
+        {!isMobile && (
+          <img
+            src="/images/logowhite.png"
+            alt="Logo"
+            style={{
+              position: "absolute",
+              left: "100%",
+              top: "50%",
+              transform: "translateY(-50%)",
+              height: 300,
+              objectFit: "contain",
+              marginLeft: -70,
+            }}
+          />
+        )}
       </div>
     </div>
   );
