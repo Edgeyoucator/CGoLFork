@@ -13,6 +13,7 @@ export function attachInput(
   callbacks: InputCallbacks,
 ): () => void {
   let painting = false;
+  let visitedCells = new Set<number>();
 
   function cellFromPointer(e: PointerEvent): { x: number; y: number } | null {
     const rect = canvas.getBoundingClientRect();
@@ -52,16 +53,16 @@ export function attachInput(
     return true;
   }
 
-  // Drag: place or erase (not toggle)
-  function dragCell(x: number, y: number, shiftHeld: boolean): boolean {
+  // Drag: place on empty cells, erase own alive cells
+  function dragCell(x: number, y: number): boolean {
     const player = getActivePlayer();
     if (!isInTerritory(x, player)) return false;
 
     const i = idx(x, y);
 
-    if (shiftHeld) {
-      // Shift-drag: erase own cells only
-      if (board.alive[i] && board.owner[i] === player) {
+    if (board.alive[i]) {
+      // Erase own cells when dragged over
+      if (board.owner[i] === player) {
         board.alive[i] = 0;
         board.owner[i] = -1;
         return true;
@@ -69,8 +70,6 @@ export function attachInput(
       return false;
     }
 
-    // Normal drag: place only (skip if already alive)
-    if (board.alive[i]) return false;
     if (callbacks.getBudgetRemaining() <= 0) return false;
     board.alive[i] = 1;
     board.owner[i] = player as 0 | 1;
@@ -79,12 +78,15 @@ export function attachInput(
 
   function onPointerDown(e: PointerEvent) {
     painting = true;
+    visitedCells = new Set<number>();
     canvas.setPointerCapture(e.pointerId);
 
     const cell = cellFromPointer(e);
     if (!cell) return;
 
-    // First click is a toggle
+    const i = idx(cell.x, cell.y);
+    visitedCells.add(i);
+
     if (toggleCell(cell.x, cell.y)) {
       callbacks.onPaint();
     }
@@ -95,13 +97,18 @@ export function attachInput(
     const cell = cellFromPointer(e);
     if (!cell) return;
 
-    if (dragCell(cell.x, cell.y, e.shiftKey)) {
+    const i = idx(cell.x, cell.y);
+    if (visitedCells.has(i)) return;
+    visitedCells.add(i);
+
+    if (dragCell(cell.x, cell.y)) {
       callbacks.onPaint();
     }
   }
 
   function onPointerUp() {
     painting = false;
+    visitedCells = new Set<number>();
   }
 
   canvas.addEventListener("pointerdown", onPointerDown);

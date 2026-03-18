@@ -5,7 +5,11 @@
       "Bash(npm install:*)",
       "Bash(npx tsc:*)",
       "Bash(npx vite build)",
-      "Bash(timeout 3 node:*)"
+      "Bash(timeout 3 node:*)",
+      "Bash(dir:*)",
+      "Bash(npx sharp-cli:*)",
+      "Bash(ls:*)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

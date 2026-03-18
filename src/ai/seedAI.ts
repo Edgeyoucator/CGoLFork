@@ -7,10 +7,22 @@ export type SeedAIInput = {
 };
 
 const PATTERNS: Array<{ name: string; cells: Array<[number, number]> }> = [
-  { name: "block", cells: [[0, 0], [1, 0], [0, 1], [1, 1]] },
-  { name: "blinker", cells: [[0, 0], [1, 0], [2, 0]] },
-  { name: "beacon", cells: [[0, 0], [1, 0], [0, 1], [3, 2], [2, 3], [3, 3]] },
-  { name: "glider", cells: [[1, 0], [2, 1], [0, 2], [1, 2], [2, 2]] },
+  // Weighted toward chaotic by repetition
+  { name: "r_pentomino", cells: [[1,0],[2,0],[0,1],[1,1],[1,2]] },
+  { name: "r_pentomino", cells: [[1,0],[2,0],[0,1],[1,1],[1,2]] },
+  { name: "acorn",       cells: [[1,0],[3,1],[0,2],[1,2],[4,2],[5,2],[6,2]] },
+  { name: "acorn",       cells: [[1,0],[3,1],[0,2],[1,2],[4,2],[5,2],[6,2]] },
+  { name: "diehard",     cells: [[6,0],[0,1],[1,1],[1,2],[5,2],[6,2],[7,2]] },
+  { name: "glider",      cells: [[1,0],[2,1],[0,2],[1,2],[2,2]] },
+  { name: "beacon",      cells: [[0,0],[1,0],[0,1],[3,2],[2,3],[3,3]] },
+];
+
+// Small clusters used to spend leftover budget — survive long enough to interact
+const FILLERS: Array<Array<[number, number]>> = [
+  [[0,0],[1,0],[0,1],[1,1]],   // block (stable)
+  [[0,1],[1,1],[2,1]],         // blinker (oscillates)
+  [[0,0],[1,0],[2,0]],         // row of 3 — evolves into blinker
+  [[0,0],[1,1],[0,1]],         // L-tromino — short-lived but not instant
 ];
 
 function mulberry32(seed: number) {
@@ -41,31 +53,30 @@ export function seedAI(input: SeedAIInput): number[] {
   const centers: Array<{ x: number; y: number }> = [];
 
   const tryPlacePattern = (pattern: Array<[number, number]>): boolean => {
-    const w = Math.max(...pattern.map((p) => p[0])) + 1;
-    const h = Math.max(...pattern.map((p) => p[1])) + 1;
-    const x0 = randInt(rng, minX, maxX - w + 1);
-    const y0 = randInt(rng, minY, maxY - h + 1);
+    const pw = Math.max(...pattern.map((p) => p[0])) + 1;
+    const ph = Math.max(...pattern.map((p) => p[1])) + 1;
+    if (maxX - pw + 1 < minX || maxY - ph + 1 < minY) return false;
+
+    const x0 = randInt(rng, minX, maxX - pw + 1);
+    const y0 = randInt(rng, minY, maxY - ph + 1);
 
     for (const [dx, dy] of pattern) {
       const x = x0 + dx;
       const y = y0 + dy;
       if (x < minX || x > maxX || y < minY || y > maxY) return false;
       if (x < midX) return false;
-      const i = y * width + x;
-      if (used.has(i)) return false;
+      if (used.has(y * width + x)) return false;
     }
 
     for (const [dx, dy] of pattern) {
-      const x = x0 + dx;
-      const y = y0 + dy;
-      const i = y * width + x;
-      used.add(i);
+      used.add((y0 + dy) * width + (x0 + dx));
     }
-    centers.push({ x: x0 + Math.floor(w / 2), y: y0 + Math.floor(h / 2) });
+    centers.push({ x: x0 + Math.floor(pw / 2), y: y0 + Math.floor(ph / 2) });
     return true;
   };
 
-  const targetPatterns = randInt(rng, 2, 4);
+  // Place main chaotic patterns
+  const targetPatterns = randInt(rng, 3, 5);
   let attempts = 0;
   while (centers.length < targetPatterns && attempts < 40) {
     attempts++;
@@ -74,34 +85,38 @@ export function seedAI(input: SeedAIInput): number[] {
     tryPlacePattern(pattern.cells);
   }
 
+  // Fill remaining budget with small clusters near existing patterns (not lone cells)
   let remaining = budget - used.size;
-  let noiseAttempts = 0;
-  while (remaining > 0 && noiseAttempts < 200) {
-    noiseAttempts++;
+  let fillerAttempts = 0;
+  while (remaining > 0 && fillerAttempts < 200) {
+    fillerAttempts++;
+    const filler = FILLERS[randInt(rng, 0, FILLERS.length - 1)];
+    if (filler.length > remaining) continue;
+
+    // Place near an existing pattern center for interesting interactions
     let base;
     if (centers.length > 0) {
       base = centers[randInt(rng, 0, centers.length - 1)];
     } else {
       base = { x: randInt(rng, minX, maxX), y: randInt(rng, minY, maxY) };
     }
-    const x = Math.min(maxX, Math.max(minX, base.x + randInt(rng, -2, 2)));
-    const y = Math.min(maxY, Math.max(minY, base.y + randInt(rng, -2, 2)));
-    if (x < midX) continue;
-    const i = y * width + x;
-    if (used.has(i)) continue;
-    used.add(i);
-    remaining--;
-  }
 
-  let fallbackAttempts = 0;
-  while (remaining > 0 && fallbackAttempts < 1000) {
-    fallbackAttempts++;
-    const x = randInt(rng, minX, maxX);
-    const y = randInt(rng, minY, maxY);
-    const i = y * width + x;
-    if (used.has(i)) continue;
-    used.add(i);
-    remaining--;
+    const offsetX = randInt(rng, -3, 3);
+    const offsetY = randInt(rng, -3, 3);
+    const shifted = filler.map(([dx, dy]) => [dx + offsetX, dy + offsetY] as [number, number]);
+
+    const valid = shifted.every(([dx, dy]) => {
+      const x = base.x + dx;
+      const y = base.y + dy;
+      return x >= minX && x <= maxX && x >= midX && y >= minY && y <= maxY && !used.has(y * width + x);
+    });
+
+    if (valid) {
+      for (const [dx, dy] of shifted) {
+        used.add((base.y + dy) * width + (base.x + dx));
+      }
+      remaining -= filler.length;
+    }
   }
 
   return Array.from(used);

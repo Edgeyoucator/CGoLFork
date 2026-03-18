@@ -1,5 +1,14 @@
 @import "./tokens.css";
 
+@font-face {
+  font-family: "LeBeaune";
+  src: url("/fonts/LeBeauneNew.woff2") format("woff2"),
+       url("/fonts/LeBeauneNew.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 *,
 *::before,
 *::after {
@@ -73,6 +82,15 @@ body {
 
 .btn--primary:active {
   background: #c0481a;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px 2px rgba(241,95,36,0.4); }
+  50%       { box-shadow: 0 0 18px 6px rgba(241,95,36,0.8); }
+}
+
+.btn--glow {
+  animation: glow-pulse 2s ease-in-out infinite;
 }
 
 /* Glass input */

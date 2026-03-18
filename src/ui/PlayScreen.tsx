@@ -3,10 +3,7 @@ import { GRID_W, GRID_H } from "../game/types";
 import type { BoardState } from "../game/types";
 import { stepLife, countLiveByPlayer } from "../game/engine";
 import type { GameMode } from "../game/modes";
-import type { GameSocket } from "../net/socket.ts";
-import type { RoomState } from "../net/protocol.ts";
 import LifeCanvas from "../canvas/LifeCanvas";
-import LeaderboardModal from "./LeaderboardModal";
 
 const TICK_RATE = 12;
 const TICK_MS = 1000 / TICK_RATE;
@@ -21,19 +18,9 @@ interface Props {
   onPlayAgain: () => void;
   onReplay: () => void;
   onReset: () => void;
-  // Networked mode
-  networked?: boolean;
-  myRole?: number | "spectator";
-  roomState?: RoomState | null;
   aiMode?: boolean;
-  netTick?: number;
-  netCounts?: [number, number];
-  netFinished?: boolean;
-  netWinner?: string | null;
-  socket?: GameSocket | null;
 }
 
-const ROLE_LABELS = ["P1", "P2", "Spectator"];
 
 export default function PlayScreen({
   board,
@@ -43,33 +30,21 @@ export default function PlayScreen({
   onPlayAgain,
   onReplay,
   onReset,
-  networked = false,
-  myRole,
-  roomState,
   aiMode = false,
-  netTick,
-  netCounts,
-  netFinished,
-  netWinner,
-  socket,
 }: Props) {
   const total = GRID_W * GRID_H;
-  const isSpectator = myRole === "spectator";
-  const isPlayer = networked && typeof myRole === "number";
-
   const [localTick, setLocalTick] = useState(0);
-  const [localPlaying, setLocalPlaying] = useState(!networked);
+  const [localPlaying, setLocalPlaying] = useState(true);
   const [localCounts, setLocalCounts] = useState(() => {
     const c = countLiveByPlayer(board.alive, board.owner, total);
     return [c.p1, c.p2] as [number, number];
   });
   const [localFinished, setLocalFinished] = useState(false);
   const [redrawKey, setRedrawKey] = useState(0);
-  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
-
-  const tick = networked ? (netTick ?? 0) : localTick;
-  const counts = networked ? (netCounts ?? [0, 0]) : localCounts;
-  const finished = networked ? (netFinished ?? false) : localFinished;
+  const [confirmRestart, setConfirmRestart] = useState(false);
+  const tick = localTick;
+  const counts = localCounts;
+  const finished = localFinished;
 
   const nextAliveRef = useRef(new Uint8Array(total));
   const nextOwnerRef = useRef(new Int8Array(total));
@@ -78,6 +53,9 @@ export default function PlayScreen({
   tickRef.current = localTick;
   const hashHistoryRef = useRef<number[]>([]);
   const loopStreakRef = useRef(0);
+  const graceTicksRef = useRef<number | null>(null);
+  const p1PrevHashRef = useRef<number | null>(null);
+  const p1StaticStreakRef = useRef(0);
 
   const computeBoardHash = useCallback((alive: Uint8Array, owner: Int8Array) => {
     let h = 2166136261;
@@ -107,13 +85,10 @@ export default function PlayScreen({
   }, [computeBoardHash]);
 
   useEffect(() => {
-    if (networked) {
-      redrawRef.current?.();
-    }
-  }, [networked, netTick]);
+    // local-only: nothing to do
+  }, []);
 
   const doStep = useCallback(() => {
-    if (networked) return;
     if (tickRef.current >= mode.maxTicks) return;
 
     stepLife(board.alive, board.owner, nextAliveRef.current, nextOwnerRef.current, GRID_W, GRID_H);
@@ -126,36 +101,62 @@ export default function PlayScreen({
     setLocalTick(newTick);
     redrawRef.current?.();
 
-    if (updateHistoryAndCheckLoop(board.alive, board.owner) || c.p1 === 0 || c.p2 === 0 || newTick >= mode.maxTicks) {
+    const looped = updateHistoryAndCheckLoop(board.alive, board.owner);
+    const extinct = c.p1 === 0 || c.p2 === 0;
+    const hitMax = newTick >= mode.maxTicks;
+
+    // Detect if P1's cells are completely static
+    let p1Hash = 2166136261;
+    for (let i = 0; i < total; i++) {
+      if (board.alive[i] && board.owner[i] === 0) {
+        p1Hash ^= i;
+        p1Hash = Math.imul(p1Hash, 16777619);
+      }
+    }
+    p1Hash = p1Hash >>> 0;
+    if (p1PrevHashRef.current === p1Hash) {
+      p1StaticStreakRef.current += 1;
+    } else {
+      p1StaticStreakRef.current = 0;
+    }
+    p1PrevHashRef.current = p1Hash;
+    const p1Static = p1StaticStreakRef.current >= 3;
+
+    if (looped || hitMax) {
+      graceTicksRef.current = null;
       setLocalPlaying(false);
       setLocalFinished(true);
+    } else if (extinct || p1Static) {
+      if (graceTicksRef.current === null) graceTicksRef.current = 10;
+      graceTicksRef.current -= 1;
+      if (graceTicksRef.current <= 0) {
+        graceTicksRef.current = null;
+        setLocalPlaying(false);
+        setLocalFinished(true);
+      }
     }
-  }, [board, total, mode.maxTicks, networked, updateHistoryAndCheckLoop]);
+  }, [board, total, mode.maxTicks, updateHistoryAndCheckLoop]);
 
   useEffect(() => {
-    if (networked) return;
     hashHistoryRef.current = [];
     loopStreakRef.current = 0;
-    updateHistoryAndCheckLoop(board.alive, board.owner);
+    graceTicksRef.current = null;
+    p1PrevHashRef.current = null;
+    p1StaticStreakRef.current = 0;
     if (!localPlaying) return;
-    if (localCounts[0] === 0 || localCounts[1] === 0) {
-      setLocalPlaying(false);
-      setLocalFinished(true);
-      return;
-    }
     const id = setInterval(doStep, TICK_MS);
     return () => clearInterval(id);
-  }, [localPlaying, doStep, networked, localCounts, board.alive, board.owner, updateHistoryAndCheckLoop]);
+  }, [localPlaying, doStep]);
 
   const handleStep = useCallback(() => {
-    if (networked || finished) return;
+    if (finished) return;
     doStep();
-  }, [doStep, finished, networked]);
+  }, [doStep, finished]);
 
   const handlePlayPause = useCallback(() => {
-    if (networked || finished) return;
+    if (finished) return;
     setLocalPlaying((p) => !p);
-  }, [finished, networked]);
+  }, [finished]);
 
   const handlePlayAgain = useCallback(() => {
     setLocalPlaying(false);
@@ -165,10 +166,6 @@ export default function PlayScreen({
   }, [onPlayAgain]);
 
   const handleReplay = useCallback(() => {
-    if (networked && socket) {
-      socket.sendWatchReplay();
-      return;
-    }
     onReplay();
     setLocalTick(0);
     setLocalFinished(false);
@@ -178,35 +175,17 @@ export default function PlayScreen({
     });
     setRedrawKey((v) => v + 1);
     setTimeout(() => setLocalPlaying(true), 0);
-  }, [networked, socket, onReplay, board, total]);
+  }, [onReplay, board, total]);
 
   let winner: string | null = null;
   if (finished) {
-    if (networked) {
-      winner = netWinner ?? null;
-    } else {
-      winner = mode.getWinner({ p1Live: counts[0], p2Live: counts[1], tick });
-    }
+    winner = mode.getWinner({ p1Live: counts[0], p2Live: counts[1], tick });
   }
   const winnerName =
     winner === "P1" ? players[0] : winner === "P2" ? players[1] : null;
 
-  const roleLabel = isSpectator
-    ? "Spectator"
-    : isPlayer
-      ? `You are ${ROLE_LABELS[myRole as number]}`
-      : null;
 
-  const playAgainReady: [boolean, boolean] = roomState?.playAgainReady ?? [false, false];
-  const isWaitingForOther = isPlayer
-    ? (myRole === 0 ? playAgainReady[0] : playAgainReady[1]) && !(playAgainReady[0] && playAgainReady[1])
-    : false;
 
-  const handlePlayAgainNetworked = useCallback(() => {
-    if (!networked || !socket || !isPlayer) return;
-    const current = myRole === 0 ? playAgainReady[0] : playAgainReady[1];
-    socket.sendPlayAgain(!current);
-  }, [networked, socket, isPlayer, myRole, playAgainReady]);
 
   return (
     <div
@@ -219,6 +198,8 @@ export default function PlayScreen({
         position: "relative",
       }}
     >
+      {/* Background moved to canvas area for visibility */}
+      <div style={{ position: "relative", zIndex: 2, display: "flex", flexDirection: "column", gap: 12, height: "100%" }}>
       {/* HUD */}
       <div
         className="glass"
@@ -259,13 +240,7 @@ export default function PlayScreen({
             {players[1]}: {counts[1]}
           </span>
         </div>
-
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          {roleLabel && (
-            <span style={{ fontSize: "0.85em", color: "var(--grey)" }}>
-              {roleLabel}
-            </span>
-          )}
           <span style={{ fontWeight: "bold", color: "var(--blue)" }}>
             Tick: {tick} / {mode.maxTicks}
           </span>
@@ -273,42 +248,61 @@ export default function PlayScreen({
       </div>
 
       {/* Canvas */}
-      <LifeCanvas
-        key={redrawKey}
-        board={board}
-        interactive={false}
-        redrawRef={redrawRef}
-      />
-
-      {/* Controls */}
-      {!networked && (
+      <div style={{ position: "relative", flex: 1, display: "flex", minHeight: 0 }}>
+        <LifeCanvas
+          key={redrawKey}
+          board={board}
+          interactive={false}
+          redrawRef={redrawRef}
+          showTerritories
+        />
+        {/* Subtle vignette overlay */}
         <div
           style={{
-            display: "flex",
-            gap: 12,
-            justifyContent: "center",
-            flexWrap: "wrap",
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            background:
+              "radial-gradient(ellipse at center, transparent 40%, rgba(22,34,55,0.5) 100%)",
           }}
-        >
-          <button
-            className="btn"
-            onClick={handlePlayPause}
-            style={{ minWidth: 90 }}
-            disabled={finished}
-          >
-            {localPlaying ? "Pause" : "Play"}
-          </button>
-          <button className="btn" onClick={handleStep} disabled={finished}>
-            Step
-          </button>
-          {!aiMode && (
-            <button className="btn" onClick={onReset}>
-              Reset
-            </button>
-          )}
-        </div>
-      )}
+        />
+      </div>
 
+      {/* Controls */}
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          justifyContent: "center",
+          flexWrap: "wrap",
+        }}
+      >
+        <button
+          className="btn"
+          onClick={handlePlayPause}
+          style={{ minWidth: 90 }}
+          disabled={finished}
+        >
+          {localPlaying ? "Pause" : "Play"}
+        </button>
+        <button className="btn" onClick={handleStep} disabled={finished}>
+          Step
+        </button>
+        {!aiMode && (
+          <button className="btn" onClick={onReset}>
+            Reset
+          </button>
+        )}
+        <button
+          className="btn"
+          onClick={() => { setLocalPlaying(false); setConfirmRestart(true); }}
+          disabled={finished}
+        >
+          Restart
+        </button>
+      </div>
+
+      </div>
       {/* Result overlay */}
       {finished && (
         <div
@@ -351,58 +345,86 @@ export default function PlayScreen({
             </div>
 
             <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
-              {networked ? (
-                <>
-                  {!isSpectator && (
-                    <button className="btn" onClick={handleReplay}>
-                      Watch Replay
+              <>
+                <button className="btn" onClick={handlePlayAgain}>
+                  Play Again
+                </button>
+                <button
+                  className="btn"
+                  onClick={handleReplay}
+                  disabled={!hasSnapshot}
+                >
+                  Watch Replay
+                </button>
+                {aiMode && (
+                  <>
+                    <button
+                      className="btn"
+                      onClick={() => {
+                        const text = `I just scored ${counts[0]} vs AI ${counts[1]} at tick ${tick} playing Conway's Clash! Can you beat me?`;
+                        const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(window.location.origin)}`;
+                        window.open(url, "_blank", "noopener,noreferrer");
+                      }}
+                    >
+                      Share on X
                     </button>
-                  )}
-                  {isPlayer && (
-                    <button className="btn" onClick={handlePlayAgainNetworked}>
-                      {isWaitingForOther ? "Waiting for other player..." : "Play Again"}
-                    </button>
-                  )}
-                  {!aiMode && (
-                    <button className="btn" onClick={() => setLeaderboardOpen(true)}>
-                      See Leaderboard
-                    </button>
-                  )}
+                  </>
+                )}
+                {!aiMode && (
                   <button className="btn" onClick={onReset}>
-                    Leave Room
+                    Reset
                   </button>
-                </>
-              ) : (
-                <>
-                  <button className="btn" onClick={handlePlayAgain}>
-                    Play Again
-                  </button>
-                  <button
-                    className="btn"
-                    onClick={handleReplay}
-                    disabled={!hasSnapshot}
-                  >
-                    Watch Replay
-                  </button>
-                  {!aiMode && (
-                    <button className="btn" onClick={() => setLeaderboardOpen(true)}>
-                      See Leaderboard
-                    </button>
-                  )}
-                  {!aiMode && (
-                    <button className="btn" onClick={onReset}>
-                      Reset
-                    </button>
-                  )}
-                </>
-              )}
+                )}
+              </>
             </div>
           </div>
         </div>
       )}
-      {!aiMode && (
-        <LeaderboardModal open={leaderboardOpen} onClose={() => setLeaderboardOpen(false)} />
+      {/* Restart confirmation */}
+      {confirmRestart && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(22,34,55,0.7)",
+            zIndex: 20,
+          }}
+        >
+          <div
+            className="glass"
+            style={{
+              padding: "32px 40px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 16,
+              minWidth: 280,
+            }}
+          >
+            <p style={{ margin: 0, fontSize: "1.1rem", textAlign: "center" }}>
+              Restart with your current seed?
+            </p>
+            <div style={{ display: "flex", gap: 12 }}>
+              <button
+                className="btn btn--primary"
+                onClick={() => { setConfirmRestart(false); handlePlayAgain(); }}
+              >
+                Yes, restart
+              </button>
+              <button
+                className="btn"
+                onClick={() => { setConfirmRestart(false); setLocalPlaying(true); }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
+      {/* Public demo: no leaderboard modal */}
     </div>
   );
 }

@@ -1,51 +1,36 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { GRID_W, GRID_H, DEFAULT_BUDGET, countCells, clearBoard } from "../game/types";
+
+const ABOUT_SLIDES = ["/images/1.webp", "/images/2.webp", "/images/3.webp"];
+import { DEFAULT_BUDGET, countCells } from "../game/types";
 import type { BoardState } from "../game/types";
-import type { RoomState } from "../net/protocol.ts";
-import type { GameSocket } from "../net/socket.ts";
 import LifeCanvas from "../canvas/LifeCanvas";
 
 interface Props {
   board: BoardState;
   players: [string, string];
   onBack: () => void;
-  // Local mode
   onAutoStart?: () => void;
   onClearAll?: () => void;
-  // Networked mode
-  myRole?: number | "spectator";
-  roomState?: RoomState | null;
-  socket?: GameSocket | null;
-  seedVersion?: number;
-  seedSyncKey?: number;
-  getSeedVersion?: () => number;
-  seedReject?: { id: number; reason: string } | null;
+  onResetAI?: () => void;
   aiMode?: boolean;
 }
 
 const PLAYER_COLORS = ["var(--orange)", "var(--mint)"];
-const ROLE_LABELS = ["P1", "P2", "Spectator"];
 
 export default function SeedScreen({
   board,
   players,
   onBack,
   onAutoStart,
-  onClearAll,
-  myRole,
-  roomState,
-  socket,
-  seedVersion,
-  seedSyncKey,
-  getSeedVersion,
-  seedReject,
+  onResetAI,
   aiMode = false,
 }: Props) {
-  const networked = myRole !== undefined && socket !== null && socket !== undefined;
-  const isSpectator = myRole === "spectator";
-  const playerRole = typeof myRole === "number" ? myRole : -1;
+  const isSpectator = false;
+  const playerRole = 0;
 
-  const [activePlayer, setActivePlayer] = useState(networked ? (playerRole >= 0 ? playerRole : 0) : 0);
+  const [activePlayer, setActivePlayer] = useState(0);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [slideIndex, setSlideIndex] = useState(0);
   const [counts, setCounts] = useState<[number, number]>(() => countCells(board));
   const redrawRef = useRef<(() => void) | null>(null);
 
@@ -53,253 +38,78 @@ export default function SeedScreen({
   const [localReady, setLocalReady] = useState<[boolean, boolean]>(aiMode ? [false, true] : [false, false]);
   const autoStartedRef = useRef(false);
 
-  const ready: [boolean, boolean] = networked && roomState
-    ? roomState.ready
-    : localReady;
+  const ready: [boolean, boolean] = localReady;
 
   const unreadyBoth = useCallback(() => {
-    if (!networked) {
-      setLocalReady(aiMode ? [false, true] : [false, false]);
-      autoStartedRef.current = false;
-    }
-  }, [networked, aiMode]);
+    setLocalReady(aiMode ? [false, true] : [false, false]);
+    autoStartedRef.current = false;
+  }, [aiMode]);
 
   const recount = useCallback(() => {
     setCounts(countCells(board));
   }, [board]);
 
-  // Collect deltas during a paint gesture and send as batch
-  const pendingDeltasRef = useRef<{ i: number; alive: 0 | 1 }[]>([]);
-  const flushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Track board changes for delta computation
-  const lastSentRef = useRef<{ alive: Uint8Array; owner: Int8Array } | null>(null);
-  const inflightRef = useRef(false);
-  const pendingReadyRef = useRef(false);
-  const inflightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastAttemptedRef = useRef<{ i: number; alive: 0 | 1 }[]>([]);
-
-  const sendPendingDeltas = useCallback(() => {
-    if (inflightRef.current || !socket) return false;
-    if (pendingDeltasRef.current.length === 0) return false;
-
-    const pending = pendingDeltasRef.current;
-    pendingDeltasRef.current = [];
-
-    const merged = new Map<number, 0 | 1>();
-    for (const c of pending) merged.set(c.i, c.alive);
-    const batched = Array.from(merged.entries()).map(([i, alive]) => ({ i, alive }));
-    const baseSeedVersion = getSeedVersion ? getSeedVersion() : (typeof seedVersion === "number" ? seedVersion : 0);
-    inflightRef.current = true;
-    lastAttemptedRef.current = batched;
-    socket.sendSeedDelta(batched, baseSeedVersion);
-
-    // Safety timeout: if no sync arrives, release inflight to avoid deadlock
-    if (inflightTimeoutRef.current) {
-      clearTimeout(inflightTimeoutRef.current);
-    }
-    inflightTimeoutRef.current = setTimeout(() => {
-      inflightRef.current = false;
-      inflightTimeoutRef.current = null;
-      if (pendingDeltasRef.current.length > 0) {
-        sendPendingDeltas();
-      } else if (pendingReadyRef.current) {
-        pendingReadyRef.current = false;
-        socket?.sendReady(true);
-      }
-    }, 600);
-
-    // Update last sent snapshot
-    lastSentRef.current = {
-      alive: new Uint8Array(board.alive),
-      owner: new Int8Array(board.owner),
-    };
-    return true;
-  }, [socket, seedVersion, board.alive, board.owner]);
-
-  // Override handlePaint to use proper delta tracking
-  const handlePaintWithDelta = useCallback(() => {
+  // Local paint handling
+  const handlePaint = useCallback(() => {
     recount();
-    if (networked && !isSpectator && playerRole >= 0) {
-      // Compare current board to last sent state in our territory
-      const total = GRID_W * GRID_H;
-      const changes: { i: number; alive: 0 | 1 }[] = [];
-      const last = lastSentRef.current;
+    unreadyBoth();
+  }, [recount, unreadyBoth]);
 
-      for (let i = 0; i < total; i++) {
-        const x = i % GRID_W;
-        const inTerritory = playerRole === 0 ? x < GRID_W / 2 : x >= GRID_W / 2;
-        if (!inTerritory) continue;
+  // Local-only: no network snapshot to init
+  useEffect(() => {}, [board]);
 
-        const wasAlive = last ? last.alive[i] : 0;
-        const wasOwn = last ? last.owner[i] === playerRole : false;
-        const isAlive = board.alive[i] === 1;
-        const isOwn = board.owner[i] === playerRole;
-
-        if (isAlive && isOwn && !(wasAlive && wasOwn)) {
-          changes.push({ i, alive: 1 });
-        } else if (wasAlive && wasOwn && !(isAlive && isOwn)) {
-          changes.push({ i, alive: 0 });
-        }
-      }
-
-      if (changes.length > 0) {
-        // Coalesce changes until we can send (avoid out-of-sync rejects)
-        for (const c of changes) {
-          pendingDeltasRef.current.push(c);
-        }
-        if (!flushTimeoutRef.current) {
-          flushTimeoutRef.current = setTimeout(() => {
-            flushTimeoutRef.current = null;
-            if (!sendPendingDeltas()) {
-              // If still inflight, try again shortly
-              if (inflightRef.current) {
-                flushTimeoutRef.current = setTimeout(() => {
-                  flushTimeoutRef.current = null;
-                  sendPendingDeltas();
-                }, 30);
-              }
-            }
-          }, 30);
-        }
-      }
-    } else if (!networked) {
-      unreadyBoth();
-    }
-  }, [board, networked, isSpectator, playerRole, recount, unreadyBoth, seedVersion, sendPendingDeltas]);
-
-  // Initialize last sent snapshot
+  // Local-only: no server sync
   useEffect(() => {
-    if (networked) {
-      lastSentRef.current = {
-        alive: new Uint8Array(board.alive),
-        owner: new Int8Array(board.owner),
-      };
-    }
-  }, [networked, board]);
+    // noop
+  }, [recount, board.alive, board.owner]);
 
-  // Update last sent when seed state arrives from server
-  useEffect(() => {
-    if (networked) {
-      lastSentRef.current = {
-        alive: new Uint8Array(board.alive),
-        owner: new Int8Array(board.owner),
-      };
-      inflightRef.current = false;
-      if (inflightTimeoutRef.current) {
-        clearTimeout(inflightTimeoutRef.current);
-        inflightTimeoutRef.current = null;
-      }
-      // If we were waiting to send or to ready, do it now
-      if (pendingDeltasRef.current.length > 0) {
-        sendPendingDeltas();
-      } else if (pendingReadyRef.current) {
-        pendingReadyRef.current = false;
-        socket?.sendReady(true);
-      }
-      recount();
-      redrawRef.current?.();
-    }
-  }, [networked, seedVersion, seedSyncKey, recount, board.alive, board.owner, sendPendingDeltas, socket]);
-
-  useEffect(() => {
-    if (!networked || !seedReject) return;
-    inflightRef.current = false;
-    if (inflightTimeoutRef.current) {
-      clearTimeout(inflightTimeoutRef.current);
-      inflightTimeoutRef.current = null;
-    }
-
-    if (seedReject.reason === "outOfSync") {
-      // Requeue the last attempted batch and retry on the latest seedVersion
-      pendingDeltasRef.current = [
-        ...lastAttemptedRef.current,
-        ...pendingDeltasRef.current,
-      ];
-      sendPendingDeltas();
-    } else {
-      // Other rejects should not be retried
-      lastAttemptedRef.current = [];
-      pendingReadyRef.current = false;
-    }
-  }, [networked, seedReject, sendPendingDeltas]);
+  // Local-only: no reject handling
+  useEffect(() => {}, []);
 
   const getBudgetRemaining = useCallback(() => {
     return DEFAULT_BUDGET - counts[activePlayer];
   }, [counts, activePlayer]);
 
-  const handleClear = useCallback(() => {
-    if (networked) {
-      pendingDeltasRef.current = [];
-      pendingReadyRef.current = false;
-      inflightRef.current = false;
-      if (inflightTimeoutRef.current) {
-        clearTimeout(inflightTimeoutRef.current);
-        inflightTimeoutRef.current = null;
-      }
-      socket!.sendClearSeed();
-    } else {
-      if (aiMode) {
-        onClearAll?.();
-        setCounts(countCells(board));
-        redrawRef.current?.();
-        unreadyBoth();
-      } else {
-        clearBoard(board);
-        setCounts([0, 0]);
-        redrawRef.current?.();
-        unreadyBoth();
-        onClearAll?.();
+  const handleClearMyself = useCallback(() => {
+    const total = board.alive.length;
+    for (let i = 0; i < total; i++) {
+      if (board.owner[i] === 0) {
+        board.alive[i] = 0;
+        board.owner[i] = -1;
       }
     }
-  }, [board, networked, socket, unreadyBoth, onClearAll, aiMode]);
+    setCounts(countCells(board));
+    redrawRef.current?.();
+    unreadyBoth();
+  }, [board, unreadyBoth]);
 
-  const toggleReady = useCallback(
-    (player: 0 | 1) => {
-      if (networked) {
-        if (player !== playerRole) return;
-        const currentReady = roomState?.ready[playerRole] ?? false;
-        const nextReady = !currentReady;
-        if (nextReady) {
-          // Ensure all pending deltas are sent before ready
-          if (inflightRef.current || pendingDeltasRef.current.length > 0) {
-            pendingReadyRef.current = true;
-            sendPendingDeltas();
-            return;
-          }
-        } else {
-          pendingReadyRef.current = false;
-        }
-        socket!.sendReady(nextReady);
-      } else {
-        setLocalReady((prev) => {
-          const next: [boolean, boolean] = [...prev];
-          next[player] = !next[player];
-          return next;
-        });
-      }
-    },
-    [networked, playerRole, roomState, socket, sendPendingDeltas],
-  );
+  const handleResetAI = useCallback(() => {
+    onResetAI?.();
+    setCounts(countCells(board));
+    unreadyBoth();
+  }, [board, onResetAI, unreadyBoth]);
+
+  const toggleReady = useCallback((player: 0 | 1) => {
+    setLocalReady((prev) => {
+      const next: [boolean, boolean] = [...prev];
+      next[player] = !next[player];
+      return next;
+    });
+  }, []);
 
   // Local auto-start
   useEffect(() => {
-    if (networked) return;
     const aiReady = aiMode ? true : localReady[1];
     if (localReady[0] && aiReady && !autoStartedRef.current) {
       autoStartedRef.current = true;
       onAutoStart?.();
     }
-  }, [localReady, onAutoStart, networked, aiMode]);
+  }, [localReady, onAutoStart, aiMode]);
 
   // Expose a way for App to bump version (seed state from server)
   // This is done via key prop on SeedScreen
 
-  const roleLabel = isSpectator
-    ? "Spectator"
-    : networked
-      ? `You are ${ROLE_LABELS[playerRole]}`
-      : null;
+  const roleLabel = null;
 
   return (
     <div
@@ -309,8 +119,95 @@ export default function SeedScreen({
         flexDirection: "column",
         padding: 16,
         gap: 12,
+        position: "relative",
       }}
     >
+      {/* Preload about slides */}
+      <div style={{ display: "none" }} aria-hidden="true">
+        {ABOUT_SLIDES.map((src) => <img key={src} src={src} />)}
+      </div>
+
+      {/* About modal overlay */}
+      <div
+        onClick={() => setAboutOpen(false)}
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 30,
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+          background: "rgba(0,0,0,0.55)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: aboutOpen ? 1 : 0,
+          pointerEvents: aboutOpen ? "auto" : "none",
+          transition: "opacity 0.15s ease",
+        }}
+      >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: "relative", display: "inline-block" }}
+          >
+            <img
+              src={ABOUT_SLIDES[slideIndex]}
+              alt={`About slide ${slideIndex + 1}`}
+              style={{
+                display: "block",
+                maxHeight: "80vh",
+                maxWidth: "90vw",
+                borderRadius: 12,
+                boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
+              }}
+            />
+            <div style={{ position: "absolute", bottom: 20, left: 20 }}>
+              {slideIndex < ABOUT_SLIDES.length - 1 ? (
+                <button
+                  className="btn btn--primary"
+                  onClick={() => setSlideIndex((i) => i + 1)}
+                >
+                  Next
+                </button>
+              ) : (
+                <button
+                  className="btn btn--primary"
+                  onClick={() => { setAboutOpen(false); setSlideIndex(0); }}
+                >
+                  Close
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+      {/* About button — absolute left, vertically centred */}
+      <button
+        className="btn btn--glow"
+        onClick={() => { setSlideIndex(0); setAboutOpen(true); }}
+        style={{
+          position: "absolute",
+          left: 60,
+          top: "50%",
+          transform: "translateY(-50%)",
+          zIndex: 5,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          padding: "20px 18px",
+          fontSize: "0.85rem",
+          fontWeight: 600,
+          letterSpacing: "0.06em",
+          textAlign: "center",
+          background: "rgba(241,95,36,0.2)",
+          border: "1px solid var(--orange)",
+          borderRadius: 14,
+          lineHeight: 1.5,
+          width: 160,
+          color: "var(--mint)",
+        }}
+      >
+        <span>What are<br />the rules?</span>
+      </button>
       {/* HUD */}
       <div
         className="glass"
@@ -389,7 +286,7 @@ export default function SeedScreen({
                 color: PLAYER_COLORS[activePlayer],
               }}
             >
-              Painting as: {players[activePlayer]}
+              Playing as: {players[activePlayer]}
             </span>
           )}
         </div>
@@ -399,7 +296,7 @@ export default function SeedScreen({
       <LifeCanvas
         board={board}
         activePlayer={activePlayer}
-        onPaint={handlePaintWithDelta}
+        onPaint={handlePaint}
         getBudgetRemaining={getBudgetRemaining}
         showTerritories
         interactive={!isSpectator}
@@ -415,11 +312,21 @@ export default function SeedScreen({
           flexWrap: "wrap",
         }}
       >
-        <button className="btn" onClick={onBack}>
-          {networked ? "Leave Room" : "Back to Lobby"}
+        <button className="btn" onClick={onBack}>Back to Lobby</button>
+
+        <button
+          className="btn"
+          onClick={() => toggleReady(0)}
+          style={{
+            borderColor: "var(--mint)",
+            background: "rgba(134,218,189,0.15)",
+            color: "var(--mint)",
+          }}
+        >
+          {aiMode ? (ready[0] ? "Unready" : "Play") : `P1: ${ready[0] ? "Unready" : "Ready"}`}
         </button>
 
-        {!networked && !aiMode && (
+        {!aiMode && (
           <button
             className="btn"
             onClick={() => setActivePlayer((p) => (p === 0 ? 1 : 0))}
@@ -430,52 +337,31 @@ export default function SeedScreen({
         )}
 
         {!isSpectator && (
-          <button className="btn" onClick={handleClear}>
-            Clear {networked ? "My Cells" : "All"}
+          <button className="btn" onClick={handleClearMyself}>
+            Clear my Cells
           </button>
         )}
 
-        {networked && !isSpectator ? (
-          <button
-            className="btn"
-            onClick={() => toggleReady(playerRole as 0 | 1)}
-            style={{
-              borderColor: ready[playerRole] ? PLAYER_COLORS[playerRole] : undefined,
-              background: ready[playerRole]
-                ? playerRole === 0
-                  ? "rgba(241,95,36,0.2)"
-                  : "rgba(134,218,189,0.2)"
-                : undefined,
-            }}
-          >
-            {ready[playerRole] ? "Unready" : "Ready"}
+        {aiMode && (
+          <button className="btn" onClick={handleResetAI}>
+            Reset AI Cells
           </button>
-        ) : !networked ? (
-          <>
+        )}
+
+        <>
+          {aiMode ? null : (
             <button
               className="btn"
-              onClick={() => toggleReady(0)}
+              onClick={() => toggleReady(1)}
               style={{
-                borderColor: ready[0] ? "var(--orange)" : undefined,
-                background: ready[0] ? "rgba(241,95,36,0.2)" : undefined,
+                borderColor: ready[1] ? "var(--mint)" : undefined,
+                background: ready[1] ? "rgba(134,218,189,0.2)" : undefined,
               }}
             >
-              {aiMode ? (ready[0] ? "Unready" : "Play") : `P1: ${ready[0] ? "Unready" : "Ready"}`}
+              P2: {ready[1] ? "Unready" : "Ready"}
             </button>
-            {aiMode ? null : (
-              <button
-                className="btn"
-                onClick={() => toggleReady(1)}
-                style={{
-                  borderColor: ready[1] ? "var(--mint)" : undefined,
-                  background: ready[1] ? "rgba(134,218,189,0.2)" : undefined,
-                }}
-              >
-                P2: {ready[1] ? "Unready" : "Ready"}
-              </button>
-            )}
-          </>
-        ) : null}
+          )}
+        </>
       </div>
     </div>
   );
