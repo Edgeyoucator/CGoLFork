@@ -80,28 +80,25 @@ export default function LifeCanvas({
     return () => window.removeEventListener("resize", resize);
   }, [redraw]);
 
+  // Stable callbacks ref — properties updated each render so the
+  // attachment effect never needs to re-run just because counts changed.
+  const callbacksRef = useRef<InputCallbacks>({
+    onPaint: () => {},
+    getBudgetRemaining: () => Infinity,
+  });
+  callbacksRef.current.onPaint = () => { redraw(); onPaint?.(); };
+  callbacksRef.current.getBudgetRemaining = getBudgetRemaining ?? (() => Infinity);
+
   // Attach pointer input (only in interactive mode)
+  // Re-attach only when board or interactive changes, not on every repaint.
   useEffect(() => {
     if (!interactive) return;
     const cvs = canvasRef.current;
     if (!cvs) return;
-
-    const callbacks: InputCallbacks = {
-      onPaint: () => {
-        redraw();
-        onPaint?.();
-      },
-      getBudgetRemaining: getBudgetRemaining ?? (() => Infinity),
-    };
-
-    const cleanup = attachInput(
-      cvs,
-      board,
-      () => activePlayerRef.current,
-      callbacks,
-    );
+    const cleanup = attachInput(cvs, board, () => activePlayerRef.current, callbacksRef.current);
     return cleanup;
-  }, [board, redraw, onPaint, getBudgetRemaining, interactive]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [board, interactive]);
 
   return (
     <div
@@ -118,6 +115,8 @@ export default function LifeCanvas({
         style={{
           display: "block",
           cursor: interactive ? "crosshair" : "default",
+          background: "rgba(22, 34, 55, 0.93)",
+          touchAction: "none",
         }}
       />
     </div>
